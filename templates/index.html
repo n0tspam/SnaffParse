@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Log File Results</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" type="text/css"
+          href="//cdn.datatables.net/1.10.20/css/dataTables.bootstrap.min.css"/>
+    
+    <!-- Bootstrap Multiselect CSS -->
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-multiselect/0.9.15/css/bootstrap-multiselect.css">
+    
+    <style>
+        body {
+            background-color: #f8f9fa; /* Light background */
+            color: #343a40; /* Dark text for readability */
+        }
+        .table-responsive {
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+        }
+        th, td {
+            word-wrap: break-word;
+            max-width: 300px; /* Adjust as needed */
+            vertical-align: middle !important;
+        }
+        /* Color coding for Severity column */
+        .severity-cell.Red {
+            background-color: #f8d7da; /* Light red */
+            color: #721c24;
+        }
+        .severity-cell.Green {
+            background-color: #d4edda; /* Light green */
+            color: #155724;
+        }
+        .severity-cell.Yellow {
+            background-color: #fff3cd; /* Light yellow */
+            color: #856404;
+        }
+        .severity-cell.Black {
+            background-color: #d6d8d9; /* Light gray */
+            color: #1b1e21;
+        }
+        .severity-cell.NA {
+            background-color: #e2e3e5; /* Light gray */
+            color: #6c757d;
+        }
+        .filter-container {
+            margin-bottom: 20px;
+        }
+        .filter-container select {
+            margin-right: 10px;
+        }
+        .multiselect-container {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .navbar {
+            background-color: #e9ecef; /* Light navbar */
+        }
+        .navbar-brand {
+            color: #343a40 !important;
+        }
+        /* Custom alternating row colors */
+        tbody tr:nth-child(odd) {
+            background-color: #ffffff; /* White */
+        }
+        tbody tr:nth-child(even) {
+            background-color: #f2f2f2; /* Light gray */
+        }
+        /* Ensure severity cell colors override row background */
+        tbody tr .severity-cell.Red {
+            background-color: #f8d7da !important;
+            color: #721c24;
+        }
+        tbody tr .severity-cell.Green {
+            background-color: #d4edda !important;
+            color: #155724;
+        }
+        tbody tr .severity-cell.Yellow {
+            background-color: #fff3cd !important;
+            color: #856404;
+        }
+        tbody tr .severity-cell.Black {
+            background-color: #d6d8d9 !important;
+            color: #1b1e21;
+        }
+        tbody tr .severity-cell.NA {
+            background-color: #e2e3e5 !important;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="#">Log File Results</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="filter-container">
+            <form method="get" class="form-inline">
+                <div class="form-group">
+                    <label for="severity">Severity:</label>
+                    <select name="severity" id="severity" class="form-control">
+                        <option value="All">All</option>
+                        {% for severity in severity_options %}
+                        <option value="{{ severity }}"
+                            {% if severity == selected_severity %}selected{% endif %}>
+                            {{ severity }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="rule">Result of the Finding:</label>
+                    <select name="rule" id="rule" multiple class="form-control">
+                        {% for rule in rule_options %}
+                        <option value="{{ rule }}"
+                            {% if rule in selected_rules %}selected{% endif %}>
+                            {{ rule }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </form>
+        </div>
+
+        <div class="table-responsive">
+            <table id="logTable" class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Date Modified</th>
+                        <th>Full Path</th>
+                        <th>Result of the Finding</th>
+                        <th>Raw Result of the Finding</th>
+                        <th>Log File Name</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in data %}
+                    <tr>
+                        <td class="severity-cell {{ item['Severity']|replace(' ', '')|replace('/', '') }}">{{ item['Severity'] }}</td>
+                        <td>{{ item['DateModified'] }}</td>
+                        <td>{{ item['FullPath'] }}</td>
+                        <td>{{ item['RuleName'] }}</td>
+                        <td>{{ item['AdditionalData'] }}</td>
+                        <td>{{ item['Filename'] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <!-- Bootstrap JS -->
+    <script
+     src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <!-- Bootstrap Multiselect JS -->
+    <script
+     src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-multiselect/0.9.15/js/bootstrap-multiselect.min.js"></script>
+    <!-- DataTables JS -->
+    <script type="text/javascript"
+     src="//cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js"></script>
+    <script type="text/javascript"
+     src="//cdn.datatables.net/1.10.20/js/dataTables.bootstrap.min.js"></script>
+
+    <script>
+        $(document).ready(function() {
+            $('#logTable').DataTable({
+                "lengthMenu": [ [10, 25, 50, -1],
+                                [10, 25, 50, "All"] ],
+                "pageLength": 10,
+                "ordering": true,
+                "autoWidth": false,
+                "columnDefs": [
+                    { "width": "10%", "targets": 0 },
+                    { "width": "15%", "targets": 1 },
+                    { "width": "25%", "targets": 2 },
+                    { "width": "20%", "targets": 3 },
+                    { "width": "20%", "targets": 4 },
+                    { "width": "10%", "targets": 5 }
+                ]
+            });
+
+            $('#rule').multiselect({
+                includeSelectAllOption: true,
+                enableFiltering: true,
+                buttonWidth: '300px',
+                maxHeight: 300,
+                nonSelectedText: 'Select Result(s)',
+                allSelectedText: 'All Selected',
+                numberDisplayed: 1
+            });
+        });
+    </script>
+</body>
+</html>
+
