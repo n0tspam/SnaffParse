@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Log File Results</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" type="text/css"
+          href="//cdn.datatables.net/1.10.20/css/dataTables.bootstrap.min.css"/>
+    
+    <!-- Bootstrap Multiselect CSS -->
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-multiselect/0.9.15/css/bootstrap-multiselect.css">
+    
+    <style>
+        body {
+            background-color: #f8f9fa; /* Light background */
+            color: #343a40; /* Dark text for readability */
+        }
+        .table-responsive {
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+        }
+        th, td {
+            word-wrap: break-word;
+            max-width: 300px; /* Adjust as needed */
+            vertical-align: middle !important;
+        }
+        /* Color coding for Severity column */
+        .severity-cell.Red {
+            background-color: #f8d7da; /* Light red */
+            color: #721c24;
+        }
+        .severity-cell.Green {
+            background-color: #d4edda; /* Light green */
+            color: #155724;
+        }
+        .severity-cell.Yellow {
+            background-color: #fff3cd; /* Light yellow */
+            color: #856404;
+        }
+        .severity-cell.Black {
+            background-color: #d6d8d9; /* Light gray */
+            color: #1b1e21;
+        }
+        .severity-cell.NA {
+            background-color: #e2e3e5; /* Light gray */
+            color: #6c757d;
+        }
+        .filter-container {
+            margin-bottom: 20px;
+        }
+        .filter-container select {
+            margin-right: 10px;
+        }
+        .multiselect-container {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .navbar {
+            background-color: #e9ecef; /* Light navbar */
+        }
+        .navbar-brand {
+            color: #343a40 !important;
+        }
+        /* Custom alternating row colors */
+        tbody tr:nth-child(odd) {
+            background-color: #ffffff; /* White */
+        }
+        tbody tr:nth-child(even) {
+            background-color: #f2f2f2; /* Light gray */
+        }
+        /* Ensure severity cell colors override row background */
+        tbody tr .severity-cell.Red {
+            background-color: #f8d7da !important;
+            color: #721c24;
+        }
+        tbody tr .severity-cell.Green {
+            background-color: #d4edda !important;
+            color: #155724;
+        }
+        tbody tr .severity-cell.Yellow {
+            background-color: #fff3cd !important;
+            color: #856404;
+        }
+        tbody tr .severity-cell.Black {
+            background-color: #d6d8d9 !important;
+            color: #1b1e21;
+        }
+        tbody tr .severity-cell.NA {
+            background-color: #e2e3e5 !important;
+            color: #6c757d;
+        }
+        
+        /* Column visibility controls */
+        .column-controls {
+            background-color: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .column-controls h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .column-toggle {
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+        }
+        .column-toggle label {
+            font-weight: normal;
+            margin-left: 5px;
+        }
+        
+        /* Table cell styles */
+        .table td {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            white-space: normal;
+        }
+        
+        /* Force text wrapping for Raw Result column (5th column, index 4) */
+        .table td:nth-child(5), .table th:nth-child(5) {
+            white-space: normal !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            word-break: break-word !important;
+            max-width: none !important;
+            width: 50% !important;
+            min-width: 600px !important;
+        }
+        
+        /* Ensure all columns wrap text */
+        .table td:not(:nth-child(5)), .table th:not(:nth-child(5)) {
+            white-space: normal !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            max-width: 100px !important;
+        }
+        
+        /* Special handling for Full Path column - wider for better readability */
+        .table td:nth-child(3), .table th:nth-child(3) {
+            max-width: 250px !important;
+            word-break: break-all !important;
+        }
+        
+        /* Ensure table uses full width */
+        #logTable {
+            width: 100% !important;
+            table-layout: auto !important;
+        }
+        
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-default">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="#">Log File Results</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        {% if processing_errors %}
+        <div class="alert alert-warning" role="alert">
+            <strong>⚠️ Processing Warnings:</strong>
+            <ul class="mb-0">
+                {% for error in processing_errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        
+        {% if total_findings == 0 %}
+        <div class="alert alert-info" role="alert">
+            <strong>ℹ️ No findings found:</strong>
+            No [File] entries were found in the processed files. This could mean the files are in an unexpected format or don't contain security findings.
+        </div>
+        {% endif %}
+        
+        <div class="filter-container">
+            <form method="get" class="form-inline">
+                <div class="form-group">
+                    <label for="severity">Severity:</label>
+                    <select name="severity" id="severity" class="form-control">
+                        <option value="All">All</option>
+                        {% for severity in severity_options %}
+                        <option value="{{ severity }}"
+                            {% if severity == selected_severity %}selected{% endif %}>
+                            {{ severity }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="rule">Result of the Finding:</label>
+                    <select name="rule" id="rule" multiple class="form-control">
+                        {% for rule in rule_options %}
+                        <option value="{{ rule }}"
+                            {% if rule in selected_rules %}selected{% endif %}>
+                            {{ rule }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </form>
+        </div>
+
+        <div class="alert alert-info" style="margin-bottom: 20px;">
+            <strong>Current View:</strong> 
+            <span id="filtered-count">{{ data|length }}</span> of 
+            <span id="total-count">{{ total_findings }}</span> total findings
+            <span id="filter-status" style="margin-left: 10px;"></span>
+            <div class="pull-right">
+                <button class="btn btn-sm btn-primary" onclick="exportCurrentView()">
+                    <span class="glyphicon glyphicon-download-alt"></span> Export Current View
+                </button>
+                <button class="btn btn-sm btn-success" onclick="exportAllData()">
+                    <span class="glyphicon glyphicon-download"></span> Export All Data
+                </button>
+            </div>
+        </div>
+        
+        <div class="column-controls">
+            <h4>Column Visibility Controls</h4>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-severity" checked>
+                <label for="col-severity">Severity</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-datemodified" checked>
+                <label for="col-datemodified">Date Modified</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-fullpath" checked>
+                <label for="col-fullpath">Full Path</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-rulename" checked>
+                <label for="col-rulename">Result of Finding</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-additionaldata" checked>
+                <label for="col-additionaldata">Raw Result</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-userhost" checked>
+                <label for="col-userhost">User/Host</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-timestamp" checked>
+                <label for="col-timestamp">Timestamp</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-filesize" checked>
+                <label for="col-filesize">File Size</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-accesslevel" checked>
+                <label for="col-accesslevel">Access Level</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-matchpattern" checked>
+                <label for="col-matchpattern">Match Pattern</label>
+            </div>
+            <div class="column-toggle">
+                <input type="checkbox" id="col-filename" checked>
+                <label for="col-filename">Log File Name</label>
+            </div>
+            <hr>
+            <button class="btn btn-sm btn-success" onclick="showAllColumns()">Show All</button>
+            <button class="btn btn-sm btn-warning" onclick="hideAllColumns()">Hide All</button>
+        </div>
+
+        <div class="table-responsive">
+            <table id="logTable" class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Date Modified</th>
+                        <th>Full Path</th>
+                        <th>Result of the Finding</th>
+                        <th>Raw Result of the Finding</th>
+                        <th>User/Host</th>
+                        <th>Timestamp</th>
+                        <th>File Size</th>
+                        <th>Access Level</th>
+                        <th>Match Pattern</th>
+                        <th>Log File Name</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in data %}
+                    <tr>
+                        <td class="severity-cell {{ item['Severity']|replace(' ', '')|replace('/', '') }}">{{ item['Severity'] }}</td>
+                        <td>{{ item['DateModified'] }}</td>
+                        <td>{{ item['FullPath'] }}</td>
+                        <td>{{ item['RuleName'] }}</td>
+                        <td>{{ item['AdditionalData'] }}</td>
+                        <td>{{ item.get('UserHost', 'N/A') }}</td>
+                        <td>{{ item.get('Timestamp', 'N/A') }}</td>
+                        <td>{{ item.get('FileSize', 'N/A') }}</td>
+                        <td>{{ item.get('AccessLevel', 'N/A') }}</td>
+                        <td>{{ item.get('MatchPattern', 'N/A') }}</td>
+                        <td>{{ item['Filename'] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <!-- Bootstrap JS -->
+    <script
+     src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <!-- Bootstrap Multiselect JS -->
+    <script
+     src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-multiselect/0.9.15/js/bootstrap-multiselect.min.js"></script>
+    <!-- DataTables JS -->
+    <script type="text/javascript"
+     src="//cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js"></script>
+    <script type="text/javascript"
+     src="//cdn.datatables.net/1.10.20/js/dataTables.bootstrap.min.js"></script>
+
+    <script>
+        let table;
+        // Store all data for export
+        const allData = {{ all_data_json | safe }};
+        
+        $(document).ready(function() {
+            table = $('#logTable').DataTable({
+                "lengthMenu": [ [10, 25, 50, -1],
+                                [10, 25, 50, "All"] ],
+                "pageLength": 10,
+                "ordering": true,
+                "autoWidth": false,
+                "scrollX": false,
+                "columnDefs": [
+                    { "width": "60px", "targets": 0 },   // Severity - fixed minimal
+                    { "width": "90px", "targets": 1 },   // Date Modified - fixed minimal
+                    { "width": "250px", "targets": 2 },  // Full Path - fixed medium
+                    { "width": "100px", "targets": 3 },  // Result of Finding - fixed minimal
+                    { "width": "50%", "targets": 4 },    // Raw Result - 50% of table width
+                    { "width": "70px", "targets": 5 },   // User/Host - fixed minimal
+                    { "width": "90px", "targets": 6 },   // Timestamp - fixed minimal
+                    { "width": "60px", "targets": 7 },   // File Size - fixed minimal
+                    { "width": "70px", "targets": 8 },   // Access Level - fixed minimal
+                    { "width": "90px", "targets": 9 },   // Match Pattern - fixed minimal
+                    { "width": "80px", "targets": 10 }   // Log File Name - fixed minimal
+                ]
+            });
+
+            $('#rule').multiselect({
+                includeSelectAllOption: true,
+                enableFiltering: true,
+                buttonWidth: '300px',
+                maxHeight: 300,
+                nonSelectedText: 'Select Result(s)',
+                allSelectedText: 'All Selected',
+                numberDisplayed: 1
+            });
+            
+            // Set up column visibility event handlers
+            setupColumnVisibilityHandlers();
+            
+            // Update count display when DataTable changes
+            table.on('draw', function() {
+                updateCountDisplay();
+            });
+            
+            // Initial count update
+            updateCountDisplay();
+        });
+        
+        function setupColumnVisibilityHandlers() {
+            const columnMappings = [
+                'col-severity', 'col-datemodified', 'col-fullpath', 'col-rulename', 
+                'col-additionaldata', 'col-userhost', 'col-timestamp', 'col-filesize',
+                'col-accesslevel', 'col-matchpattern', 'col-filename'
+            ];
+            
+            columnMappings.forEach((colId, index) => {
+                $('#' + colId).change(function() {
+                    table.column(index).visible(this.checked);
+                    // Force table to recalculate columns after visibility change
+                    setTimeout(() => {
+                        table.columns.adjust().draw(false);
+                    }, 10);
+                });
+            });
+        }
+        
+        function updateCountDisplay() {
+            const info = table.page.info();
+            $('#filtered-count').text(info.recordsDisplay);
+            
+            // Update filter status
+            const isFiltered = info.recordsDisplay < info.recordsTotal;
+            if (isFiltered) {
+                $('#filter-status').html('<span class="label label-warning">Filtered</span>');
+            } else {
+                $('#filter-status').html('');
+            }
+        }
+        
+        function showAllColumns() {
+            const checkboxes = document.querySelectorAll('.column-controls input[type="checkbox"]');
+            checkboxes.forEach((checkbox, index) => {
+                checkbox.checked = true;
+                table.column(index).visible(true);
+            });
+        }
+        
+        function hideAllColumns() {
+            const checkboxes = document.querySelectorAll('.column-controls input[type="checkbox"]');
+            checkboxes.forEach((checkbox, index) => {
+                if (index > 0) { // Keep first column (Severity) always visible
+                    checkbox.checked = false;
+                    table.column(index).visible(false);
+                }
+            });
+        }
+        
+        // CSV Export Functions
+        function exportCurrentView() {
+            try {
+                const visibleColumns = [];
+                const headers = [];
+                
+                // Get visible columns
+                table.columns().every(function(index) {
+                    if (this.visible()) {
+                        visibleColumns.push(index);
+                        headers.push($(this.header()).text().trim());
+                    }
+                });
+                
+                // Build CSV content
+                let csv = headers.map(h => `"${h}"`).join(',') + '\n';
+                
+                let rowCount = 0;
+                // Get filtered data from DataTable - respects all filters and search
+                table.rows({ 
+                    search: 'applied',  // Applies DataTables search box filter
+                    page: 'all'         // Gets all pages, not just current page
+                }).every(function() {
+                    const node = this.node();
+                    const row = visibleColumns.map(col => {
+                        const cell = $(node).find('td').eq(col);
+                        let cellData = cell.text().trim();
+                        
+                        // Escape quotes and wrap in quotes
+                        cellData = cellData.replace(/"/g, '""');
+                        return `"${cellData}"`;
+                    });
+                    csv += row.join(',') + '\n';
+                    rowCount++;
+                });
+                
+                console.log(`Exporting ${rowCount} rows with ${visibleColumns.length} columns`);
+                downloadCSV(csv, 'snaffler_current_view.csv');
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('Error exporting data. Please check the console for details.');
+            }
+        }
+        
+        function exportAllData() {
+            try {
+                const headers = [
+                    'Severity', 'Date Modified', 'Full Path', 'Result of the Finding',
+                    'Raw Result of the Finding', 'User/Host', 'Timestamp', 'File Size',
+                    'Access Level', 'Match Pattern', 'Log File Name'
+                ];
+                
+                let csv = headers.map(h => `"${h}"`).join(',') + '\n';
+                
+                // Use the complete unfiltered dataset
+                allData.forEach(item => {
+                    const row = [
+                        item.Severity || 'N/A',
+                        item.DateModified || 'N/A',
+                        item.FullPath || 'N/A',
+                        item.RuleName || 'N/A',
+                        item.AdditionalData || 'N/A',
+                        item.UserHost || 'N/A',
+                        item.Timestamp || 'N/A',
+                        item.FileSize || 'N/A',
+                        item.AccessLevel || 'N/A',
+                        item.MatchPattern || 'N/A',
+                        item.Filename || 'N/A'
+                    ];
+                    
+                    // Escape quotes and wrap each field in quotes
+                    const escapedRow = row.map(field => {
+                        const escaped = String(field).replace(/"/g, '""');
+                        return `"${escaped}"`;
+                    });
+                    
+                    csv += escapedRow.join(',') + '\n';
+                });
+                
+                console.log(`Exporting all data: ${allData.length} rows`);
+                downloadCSV(csv, 'snaffler_all_data.csv');
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('Error exporting data. Please check the console for details.');
+            }
+        }
+        
+        function downloadCSV(csvContent, filename) {
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            
+            if (navigator.msSaveBlob) { // IE 10+
+                navigator.msSaveBlob(blob, filename);
+            } else {
+                link.href = URL.createObjectURL(blob);
+                link.download = filename;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+    </script>
+</body>
+</html>
+
