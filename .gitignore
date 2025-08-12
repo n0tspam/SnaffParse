@@ -5,3 +5,5 @@ venv/
 sample_output.tsv
 .DS_Store
 .gitignore
+*.tsv
+
