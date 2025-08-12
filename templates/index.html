@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Log File Results</title>
+    <title>Snaffler Results</title>
     <!-- Bootstrap CSS -->
     <link rel="stylesheet"
           href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
@@ -149,19 +149,59 @@
             word-break: break-all !important;
         }
         
-        /* Ensure table uses full width */
+        /* Ensure table uses full width, and fixed layout so colgroup controls widths */
         #logTable {
             width: 100% !important;
-            table-layout: auto !important;
+            table-layout: fixed !important;
         }
         
+        /* --- Column resize overrides and handles --- */
+        /* Remove restrictive max-widths so columns can resize freely */
+        #logTable th, #logTable td {
+            max-width: none !important;
+            width: auto !important;
+        }
+        /* Neutralize earlier hard rule for specific columns so resizing wins */
+        #logTable th:nth-child(5), #logTable td:nth-child(5),
+        #logTable th:nth-child(3), #logTable td:nth-child(3)  {
+            width: auto !important;
+            min-width: 120px !important;
+            max-width: none !important;
+        }
+        #logTable thead th { position: relative; }
+        .resize-handle {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            cursor: col-resize;
+            user-select: none;
+            z-index: 2;
+        }
+        .resize-handle:after {
+            content: '';
+            position: absolute;
+            left: 3px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: transparent;
+        }
+        #logTable thead th:hover .resize-handle:after {
+            background: rgba(0,0,0,0.12);
+        }
+        body.is-resizing {
+            cursor: col-resize;
+            user-select: none;
+        }
     </style>
 </head>
 <body>
     <nav class="navbar navbar-default">
         <div class="container-fluid">
             <div class="navbar-header">
-                <a class="navbar-brand" href="#">Log File Results</a>
+                <a class="navbar-brand" href="#">Snaffler Results</a>
             </div>
         </div>
     </nav>
@@ -334,32 +374,23 @@
     <script type="text/javascript"
      src="//cdn.datatables.net/1.10.20/js/dataTables.bootstrap.min.js"></script>
 
+    <!-- Inline JSON payload for all data to avoid linter complaints in JS block -->
+    <script id="all-data-json" type="application/json">{{ all_data_json | safe }}</script>
+
     <script>
         let table;
-        // Store all data for export
-        const allData = {{ all_data_json | safe }};
+        // Store all data for export (parsed from JSON script tag)
+        const allData = JSON.parse(document.getElementById('all-data-json').textContent || '[]');
         
         $(document).ready(function() {
             table = $('#logTable').DataTable({
-                "lengthMenu": [ [10, 25, 50, -1],
-                                [10, 25, 50, "All"] ],
-                "pageLength": 10,
-                "ordering": true,
-                "autoWidth": false,
-                "scrollX": false,
-                "columnDefs": [
-                    { "width": "60px", "targets": 0 },   // Severity - fixed minimal
-                    { "width": "90px", "targets": 1 },   // Date Modified - fixed minimal
-                    { "width": "250px", "targets": 2 },  // Full Path - fixed medium
-                    { "width": "100px", "targets": 3 },  // Result of Finding - fixed minimal
-                    { "width": "50%", "targets": 4 },    // Raw Result - 50% of table width
-                    { "width": "70px", "targets": 5 },   // User/Host - fixed minimal
-                    { "width": "90px", "targets": 6 },   // Timestamp - fixed minimal
-                    { "width": "60px", "targets": 7 },   // File Size - fixed minimal
-                    { "width": "70px", "targets": 8 },   // Access Level - fixed minimal
-                    { "width": "90px", "targets": 9 },   // Match Pattern - fixed minimal
-                    { "width": "80px", "targets": 10 }   // Log File Name - fixed minimal
-                ]
+                lengthMenu: [ [10, 25, 50, -1], [10, 25, 50, "All"] ],
+                pageLength: 10,
+                ordering: true,
+                autoWidth: false,
+                scrollX: false,
+                // Avoid DataTables sizing columns to preserve our manual widths
+                columns: new Array($('#logTable thead th').length).fill({ width: null })
             });
 
             $('#rule').multiselect({
@@ -382,6 +413,9 @@
             
             // Initial count update
             updateCountDisplay();
+
+            // Initialize column resizing after DataTable is ready
+            initColumnResizing();
         });
         
         function setupColumnVisibilityHandlers() {
@@ -394,14 +428,109 @@
             columnMappings.forEach((colId, index) => {
                 $('#' + colId).change(function() {
                     table.column(index).visible(this.checked);
-                    // Force table to recalculate columns after visibility change
-                    setTimeout(() => {
-                        table.columns.adjust().draw(false);
-                    }, 10);
+                    // Do not force DT to recalc widths; our colgroup handles sizing
+                    setTimeout(() => { table.draw(false); }, 10);
                 });
             });
         }
         
+        // --- Column resizing logic ---
+        function initColumnResizing() {
+            // Ensure a colgroup exists and is synced to current header widths
+            createOrSyncColGroup();
+            attachResizeHandles();
+
+            // Keep col visibility in sync with DataTables column visibility
+            $('#logTable').on('column-visibility.dt', function(e, settings, column, state){
+                const $cols = $('#logTable col');
+                const $col = $cols.eq(column);
+                if ($col.length) {
+                    $col.css('display', state ? '' : 'none');
+                }
+            });
+        }
+
+        function createOrSyncColGroup() {
+            const $table = $('#logTable');
+            const $theadTh = $table.find('thead th');
+            let $colgroup = $table.children('colgroup');
+            const columnCount = $theadTh.length;
+
+            if ($colgroup.length === 0) {
+                $colgroup = $('<colgroup></colgroup>');
+                for (let i = 0; i < columnCount; i++) {
+                    $colgroup.append('<col>');
+                }
+                $table.prepend($colgroup);
+            } else {
+                // Grow or shrink to match column count
+                const diff = columnCount - $colgroup.children('col').length;
+                if (diff > 0) {
+                    for (let i = 0; i < diff; i++) { $colgroup.append('<col>'); }
+                } else if (diff < 0) {
+                    $colgroup.children('col').slice(diff).remove();
+                }
+            }
+
+            // Initialize widths from current header widths if no explicit width set
+            const $cols = $colgroup.children('col');
+            $theadTh.each(function(i){
+                const $th = $(this);
+                const thWidth = Math.max(80, Math.round($th.outerWidth()));
+                const $col = $cols.eq(i);
+                if (!$col.attr('data-user-set')) {
+                    $col.css('width', thWidth + 'px');
+                }
+                // Honor initial DataTables visibility state
+                const isVisible = table.column(i).visible();
+                $col.css('display', isVisible ? '' : 'none');
+            });
+
+            // Trigger a lightweight redraw only
+            setTimeout(() => table.draw(false), 0);
+        }
+
+        function attachResizeHandles() {
+            const minWidth = 60; // px
+            const $table = $('#logTable');
+            const $theadTh = $table.find('thead th');
+
+            // Avoid duplicating handles if re-initialized
+            $theadTh.find('.resize-handle').remove();
+
+            $theadTh.each(function(index){
+                const handle = $('<div class="resize-handle" draggable="false"></div>');
+                $(this).append(handle);
+
+                let startX = 0;
+                let startWidth = 0;
+                let columnIndex = index;
+                const $col = $table.find('colgroup col').eq(columnIndex);
+
+                handle.on('mousedown', function(e){
+                    e.preventDefault();
+                    startX = e.pageX;
+                    // Use current computed width of the col, fallback to th width
+                    const currentWidth = parseInt($col.get(0).style.width || 0, 10) || Math.round($theadTh.eq(columnIndex).outerWidth());
+                    startWidth = currentWidth;
+                    $('body').addClass('is-resizing');
+
+                    $(document).on('mousemove.colresize', function(ev){
+                        const delta = ev.pageX - startX;
+                        const newWidth = Math.max(minWidth, startWidth + delta);
+                        $col.css('width', newWidth + 'px').attr('data-user-set', '1');
+                    });
+
+                    $(document).on('mouseup.colresize', function(){
+                        $(document).off('.colresize');
+                        $('body').removeClass('is-resizing');
+                        // Redraw without width recompute
+                        setTimeout(() => table.draw(false), 0);
+                    });
+                });
+            });
+        }
+
         function updateCountDisplay() {
             const info = table.page.info();
             $('#filtered-count').text(info.recordsDisplay);
